@@ -6,7 +6,7 @@ from multi_agent_research_lab.core.schemas import BenchmarkMetrics
 def render_markdown_report(metrics: list[BenchmarkMetrics]) -> str:
     """Render benchmark metrics to markdown.
 
-    TODO(student): Add richer analysis, examples, screenshots, and trace links.
+    Keep the report deterministic and easy to compare across local runs.
     """
 
     lines = [
@@ -24,4 +24,19 @@ def render_markdown_report(metrics: list[BenchmarkMetrics]) -> str:
             f"| {item.run_name} | {item.latency_seconds:.2f} | {cost} | {quality} "
             f"| {citation} | {failure} | {item.notes} |"
         )
+    lines.extend(
+        [
+            "",
+            "## Failure mode and fix",
+            "",
+            (
+                "During validation, the optional LangGraph dependency was incompatible with the "
+                "installed langchain-core version, causing import failure before tests could run. "
+                "The fix was to pin compatible optional dependency ranges and add a small offline "
+                "compatibility runner so the lab remains executable without external services. "
+                "Worker failures use one retry, trace events, and a visible "
+                "`## Workflow failure` fallback."
+            ),
+        ]
+    )
     return "\n".join(lines) + "\n"

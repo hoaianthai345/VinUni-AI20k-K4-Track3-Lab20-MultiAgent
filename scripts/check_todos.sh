@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-grep -R "TODO(student)" -n src tests docs || true
+rg -n --glob '!*.egg-info/**' --glob '!**/__pycache__/**' "TODO\(student\)" src tests docs || true
