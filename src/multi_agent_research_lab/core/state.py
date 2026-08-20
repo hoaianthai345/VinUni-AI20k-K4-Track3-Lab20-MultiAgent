@@ -26,9 +26,25 @@ class ResearchState(BaseModel):
     trace: list[dict[str, Any]] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
 
+    llm_input_tokens: int = 0
+    llm_output_tokens: int = 0
+    llm_cost_usd: float = 0.0
+
     def record_route(self, route: str) -> None:
         self.route_history.append(route)
         self.iteration += 1
 
     def add_trace_event(self, name: str, payload: dict[str, Any]) -> None:
         self.trace.append({"name": name, "payload": payload})
+
+    def add_llm_usage(
+        self, input_tokens: int | None, output_tokens: int | None, cost_usd: float | None
+    ) -> None:
+        """Accumulate real token usage/cost from a provider LLM call.
+
+        Offline agents never call this, so `llm_cost_usd` stays 0.0 unless a real
+        `--mode provider` run happens.
+        """
+        self.llm_input_tokens += input_tokens or 0
+        self.llm_output_tokens += output_tokens or 0
+        self.llm_cost_usd += cost_usd or 0.0

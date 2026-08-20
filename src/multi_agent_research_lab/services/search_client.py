@@ -4,7 +4,12 @@ import json
 import re
 from pathlib import Path
 
+import httpx
+
+from multi_agent_research_lab.core.errors import LabError
 from multi_agent_research_lab.core.schemas import SourceDocument
+
+TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
 
 class SearchClient:
@@ -64,3 +69,46 @@ class OfflineSearchClient(SearchClient):
             return sum(term in text for term in terms)
 
         return max(files, key=score)
+
+
+class TavilySearchClient(SearchClient):
+    """Live web search backed by the Tavily API. Requires network + API key."""
+
+    def __init__(self, api_key: str, timeout_seconds: float = 30.0) -> None:
+        if not api_key:
+            raise LabError("TAVILY_API_KEY is required to use TavilySearchClient")
+        self.api_key = api_key
+        self.timeout_seconds = timeout_seconds
+
+    def search(self, query: str, max_results: int = 5) -> list[SourceDocument]:
+        try:
+            response = httpx.post(
+                TAVILY_SEARCH_URL,
+                json={
+                    "api_key": self.api_key,
+                    "query": query,
+                    "max_results": max_results,
+                    "search_depth": "advanced",
+                    "include_answer": False,
+                },
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise LabError(f"Tavily search failed: {exc}") from exc
+
+        results = response.json().get("results", [])
+        return [
+            SourceDocument(
+                title=str(item.get("title") or item.get("url") or "Untitled source"),
+                url=item.get("url"),
+                snippet=str(item.get("content", ""))[:600],
+                metadata={
+                    "citation_id": f"tavily_{index + 1}",
+                    "topic": query,
+                    "synthetic": False,
+                    "score": item.get("score"),
+                },
+            )
+            for index, item in enumerate(results[:max_results])
+        ]

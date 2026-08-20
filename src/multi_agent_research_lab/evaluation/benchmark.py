@@ -10,9 +10,16 @@ Runner = Callable[[str], ResearchState]
 
 
 def run_benchmark(
-    run_name: str, query: str, runner: Runner
+    run_name: str,
+    query: str,
+    runner: Runner,
+    notes: str = "offline deterministic benchmark",
 ) -> tuple[ResearchState, BenchmarkMetrics]:
-    """Measure latency and deterministic offline quality proxies."""
+    """Measure latency, cost, and quality proxies for one run.
+
+    `notes` should describe how the run was produced (offline heuristics vs. a real
+    provider call) so the report doesn't mislabel a real online run as offline.
+    """
 
     started = perf_counter()
     state = runner(query)
@@ -33,10 +40,10 @@ def run_benchmark(
     metrics = BenchmarkMetrics(
         run_name=run_name,
         latency_seconds=latency,
-        estimated_cost_usd=0.0,
+        estimated_cost_usd=state.llm_cost_usd,
         quality_score=quality_score,
         citation_coverage=citation_coverage,
         failure_rate=1.0 if failed else 0.0,
-        notes="offline deterministic benchmark",
+        notes=notes,
     )
     return state, metrics

@@ -17,6 +17,24 @@ class LLMResponse:
     cost_usd: float | None = None
 
 
+# USD per 1K tokens, OpenAI published pricing as of this lab's writing. Unknown models
+# fall back to no cost estimate rather than a guess.
+_PRICING_USD_PER_1K_TOKENS: dict[str, dict[str, float]] = {
+    "gpt-4o-mini": {"input": 0.00015, "output": 0.0006},
+    "gpt-4o": {"input": 0.0025, "output": 0.01},
+    "gpt-4.1-mini": {"input": 0.0004, "output": 0.0016},
+}
+
+
+def _estimate_cost_usd(
+    model: str, input_tokens: int | None, output_tokens: int | None
+) -> float | None:
+    pricing = _PRICING_USD_PER_1K_TOKENS.get(model)
+    if pricing is None or input_tokens is None or output_tokens is None:
+        return None
+    return (input_tokens / 1000) * pricing["input"] + (output_tokens / 1000) * pricing["output"]
+
+
 class LLMClient:
     """Small OpenAI adapter kept behind the lab's provider-agnostic interface."""
 
@@ -44,8 +62,11 @@ class LLMClient:
             ],
         )
         usage = response.usage
+        input_tokens = usage.prompt_tokens if usage else None
+        output_tokens = usage.completion_tokens if usage else None
         return LLMResponse(
             content=response.choices[0].message.content or "",
-            input_tokens=usage.prompt_tokens if usage else None,
-            output_tokens=usage.completion_tokens if usage else None,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=_estimate_cost_usd(self.settings.openai_model, input_tokens, output_tokens),
         )

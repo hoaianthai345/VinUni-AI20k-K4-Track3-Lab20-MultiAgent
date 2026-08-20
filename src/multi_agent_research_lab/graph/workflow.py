@@ -57,10 +57,15 @@ from multi_agent_research_lab.agents.researcher import ResearcherAgent
 from multi_agent_research_lab.agents.supervisor import SupervisorAgent
 from multi_agent_research_lab.agents.writer import WriterAgent
 from multi_agent_research_lab.core.config import Settings, get_settings
-from multi_agent_research_lab.core.errors import AgentExecutionError
+from multi_agent_research_lab.core.errors import AgentExecutionError, LabError
 from multi_agent_research_lab.core.state import ResearchState
 from multi_agent_research_lab.observability.tracing import trace_span
-from multi_agent_research_lab.services.search_client import OfflineSearchClient
+from multi_agent_research_lab.services.llm_client import LLMClient
+from multi_agent_research_lab.services.search_client import (
+    OfflineSearchClient,
+    SearchClient,
+    TavilySearchClient,
+)
 
 
 class _GraphState(TypedDict):
@@ -76,16 +81,34 @@ class MultiAgentWorkflow:
         self,
         settings: Settings | None = None,
         corpus_root: Path | None = None,
+        mode: str = "offline",
     ) -> None:
+        if mode not in {"offline", "provider"}:
+            raise LabError("mode must be 'offline' or 'provider'")
         self.settings = settings or get_settings()
         self.corpus_root = corpus_root or (
             Path(__file__).resolve().parents[3] / "ai_agent_offline_research_corpus_v2/topics"
         )
+        self.mode = mode
         self.supervisor = SupervisorAgent()
+
+        search_client: SearchClient
+        llm_client: LLMClient | None
+        if mode == "provider":
+            if not self.settings.tavily_api_key:
+                raise LabError("TAVILY_API_KEY is required for --mode provider")
+            if not self.settings.openai_api_key:
+                raise LabError("OPENAI_API_KEY is required for --mode provider")
+            search_client = TavilySearchClient(self.settings.tavily_api_key)
+            llm_client = LLMClient(self.settings)
+        else:
+            search_client = OfflineSearchClient(self.corpus_root)
+            llm_client = None
+
         self.agents = {
-            "researcher": ResearcherAgent(OfflineSearchClient(self.corpus_root)),
-            "analyst": AnalystAgent(),
-            "writer": WriterAgent(),
+            "researcher": ResearcherAgent(search_client, llm_client),
+            "analyst": AnalystAgent(llm_client),
+            "writer": WriterAgent(llm_client),
         }
         self._started_at: float | None = None
 
